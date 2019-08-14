@@ -226,6 +226,7 @@ app.post('/', async (req, res) => {
     errHandler('Invalid Input');
     res.send(result.error);
   }
+  res.end('done');
 });
 
 app.listen('3000');
