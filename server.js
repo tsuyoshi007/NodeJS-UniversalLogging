@@ -11,7 +11,7 @@ const bodyParser = require('body-parser');
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-const db = new Datastore({ filename: './test', autoload: true });
+const db = new Datastore();
 
 const LOGS_ID = process.env.LOGS_DIRECTORY_ID;
 
