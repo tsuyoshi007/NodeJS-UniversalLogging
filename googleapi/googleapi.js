@@ -333,7 +333,45 @@ class Google {
   /**
    *
    * @param {String} spreadsheetId
-   * @param {String} sheets
+   * @param {String} tile
+   */
+  addOneSheet (spreadsheetId, title) {
+    return new Promise((resolve, reject) => {
+      var request = {
+        // The spreadsheet to apply the updates to.
+        spreadsheetId: spreadsheetId, // TODO: Update placeholder value.
+
+        resource: {
+          requests: [{
+            addSheet: {
+              properties: {
+                title: title,
+                gridProperties: {
+                  rowCount: 1000,
+                  columnCount: 7
+                }
+              }
+            }
+          }]
+        },
+
+        auth: this.oAuth2Client
+      };
+
+      this.sheet.spreadsheets.batchUpdate(request, function (err, response) {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(response);
+        }
+      });
+    });
+  }
+
+  /**
+   *
+   * @param {String} spreadsheetId
+   * @param {Array} sheets
    */
   addSheet (spreadsheetId, sheets) {
     let sheetToAdd = sheets.map(sheet => {

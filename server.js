@@ -11,7 +11,7 @@ const bodyParser = require('body-parser');
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-const db = new Datastore();
+const db = new Datastore({ filename: './test', autoload: true });
 
 const LOGS_ID = process.env.LOGS_DIRECTORY_ID;
 
@@ -45,6 +45,7 @@ function errHandler (message) {
   }).catch(err => {
     errHandler(err);
   });
+  await test();
   start();
 })();
 
@@ -125,12 +126,14 @@ async function start () {
               .catch(err => {
                 reject(err);
               });
-            const resFromAddingSheet = await google.addSheet(spreadsheet.data.id, lastSpreadsheet[0].sheets).catch(err => {
+            const newSheets = await google.addSheet(spreadsheet.data.id, lastSpreadsheet[0].sheets).catch(err => {
               errHandler(err);
             });
             await google.deleteSheet(spreadsheet.data.id, '0').catch(err => { errHandler(err); });
-            await google.addRow(spreadsheet.data.id, resFromAddingSheet.data.replies[0].addSheet.properties.title, { values: [['current_date', 'unix_time_to_date', 'unix_time', 'sub_sub_kind_name', 'log_text']] })
-              .catch(err => { errHandler(err); });
+            for (const newSheet of newSheets.data.replies) {
+              await google.addRow(spreadsheet.data.id, newSheet.addSheet.properties.title, { values: [['current_date', 'unix_time_to_date', 'unix_time', 'sub_sub_kind_name', 'log_text']] })
+                .catch(err => { errHandler(err); });
+            }
             saveAllFilesInLogKindName(folder).then(msg => {
               resolve(msg);
             }).catch(err => {
@@ -169,29 +172,7 @@ app.post('/', async (req, res) => {
     });
     if (folder.length) {
       const spreadsheets = await findDB({ parent: folder[0].id }).catch(err => { errHandler(err); });
-      const boolean = checkForCurrentDateSpreadsheet(spreadsheets);
-      if (boolean) {
-        const sheets = await findDB({ id: boolean.id, sheets: { $elemMatch: { title: subKindName } } }).catch(err => { errHandler(err); });
-        if (sheets.length) {
-          await google.addRow(boolean.id, subKindName, { values: [[currentDate, unixTimeToDate, unixTime, subSubKindName, logText]] })
-            .catch(err => { errHandler(err); });
-        } else {
-          const resFromAddingSheet = await google.addSheet(boolean.id, subKindName)
-            .catch(err => {
-              errHandler(err);
-            });
-          db.update({ id: resFromAddingSheet.data.spreadsheetId }, { $push: { sheets: { sheetId: resFromAddingSheet.data.replies[0].addSheet.properties.sheetId, title: resFromAddingSheet.data.replies[0].addSheet.properties.title, rowLength: 1 } } }, {}, function (err) {
-            if (err) {
-              errHandler(err);
-            }
-          });
-          google.resizeColumn(boolean.id, resFromAddingSheet.data.replies[0].addSheet.properties.sheetId, 0, 2, 350, 2, 2, 150, 3, 5, 400).catch(() => {
-            errHandler('Failed to resize column');
-          });
-          await google.addRow(boolean.id, subKindName, { values: [['current_date', 'unix_time_to_date', 'unix_time', 'sub_sub_kind_name', 'log_text'], [currentDate, unixTimeToDate, unixTime, subSubKindName, logText]] })
-            .catch(err => { errHandler(err); });
-        }
-      } else {
+      if (!spreadsheets.length) {
         const resFromCreatingSpreadsheet = await google.createSpreadsheet({ fileName: `${moment().format('YYYY-MM')}`, parents: [folder[0].id] })
           .catch(err => { errHandler(err); });
         await google.renameSheet(resFromCreatingSpreadsheet.data.id, 0, subKindName).catch(err => { errHandler(err); });
@@ -200,6 +181,53 @@ app.post('/', async (req, res) => {
         saveCurrentSpreadsheetDBAndResize(resFromCreatingSpreadsheet.data, folder[0]).then((msg) => {
           console.log(msg);
         }).catch(err => { errHandler(err); });
+      } else {
+        const boolean = checkForCurrentDateSpreadsheet(spreadsheets);
+        if (boolean) {
+          const sheets = await findDB({ id: boolean.id, sheets: { $elemMatch: { title: subKindName } } }).catch(err => { errHandler(err); });
+          if (sheets.length) {
+            await google.addRow(boolean.id, subKindName, { values: [[currentDate, unixTimeToDate, unixTime, subSubKindName, logText]] })
+              .catch(err => { errHandler(err); });
+          } else {
+            const resFromAddingSheet = await google.addOneSheet(boolean.id, subKindName)
+              .catch(err => {
+                errHandler(err);
+              });
+            db.update({ id: resFromAddingSheet.data.spreadsheetId }, { $push: { sheets: { sheetId: resFromAddingSheet.data.replies[0].addSheet.properties.sheetId, title: resFromAddingSheet.data.replies[0].addSheet.properties.title, rowLength: 1 } } }, {}, function (err) {
+              if (err) {
+                errHandler(err);
+              }
+            });
+            google.resizeColumn(boolean.id, resFromAddingSheet.data.replies[0].addSheet.properties.sheetId, 0, 2, 350, 2, 2, 150, 3, 5, 400).catch(() => {
+              errHandler('Failed to resize column');
+            });
+            await google.addRow(boolean.id, subKindName, { values: [['current_date', 'unix_time_to_date', 'unix_time', 'sub_sub_kind_name', 'log_text'], [currentDate, unixTimeToDate, unixTime, subSubKindName, logText]] })
+              .catch(err => { errHandler(err); });
+          }
+        } else {
+          const lastSpreadsheet = await findDB({ id: spreadsheets[0].id }).catch(err => {
+            errHandler(err);
+          });
+          const resFromCreatingSpreadsheet = await google.createSpreadsheet({ fileName: `${moment().format('YYYY-MM')}`, parents: [folder[0].id] })
+            .catch(err => {
+              errHandler(err);
+            });
+          const newSheets = await google.addSheet(resFromCreatingSpreadsheet.data.id, lastSpreadsheet[0].sheets).catch(err => {
+            errHandler(err);
+          });
+          await google.deleteSheet(resFromCreatingSpreadsheet.data.id, '0').catch(err => { errHandler(err); });
+          await google.addRow(resFromCreatingSpreadsheet.data.id, subKindName, { values: [['current_date', 'unix_time_to_date', 'unix_time', 'sub_sub_kind_name', 'log_text'], [currentDate, unixTimeToDate, unixTime, subSubKindName, logText]] })
+            .catch(err => { errHandler(err); });
+          for (const newSheet of newSheets.data.replies) {
+            if (newSheet.addSheet.properties.title !== subKindName) {
+              await google.addRow(resFromCreatingSpreadsheet.data.id, newSheet.addSheet.properties.title, { values: [['current_date', 'unix_time_to_date', 'unix_time', 'sub_sub_kind_name', 'log_text']] })
+                .catch(err => { errHandler(err); });
+            }
+          }
+          saveCurrentSpreadsheetDBAndResize(resFromCreatingSpreadsheet.data, folder[0]).then((msg) => {
+            console.log(msg);
+          }).catch(err => { errHandler(err); });
+        }
       }
     } else {
       const folderCreated = await google.createFolder({ folderName: logKindName, parents: [LOGS_ID] }).catch(err => {
