@@ -45,7 +45,6 @@ function errHandler (message) {
   }).catch(err => {
     errHandler(err);
   });
-  await test();
   start();
 })();
 
